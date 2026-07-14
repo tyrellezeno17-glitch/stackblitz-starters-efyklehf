@@ -14,7 +14,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URI)
+mongoose
+  .connect(process.env.MONGO_URI)
   .then(() => console.log('Connected to MongoDB'))
   .catch((err) => console.error('MongoDB connection error:', err));
 
@@ -52,7 +53,11 @@ async function requireAdmin(req, res, next) {
   try {
     const user = await User.findById(req.userId);
 
-    if (!user || user.email !== process.env.ADMIN_EMAIL) {
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    if (user.email !== process.env.ADMIN_EMAIL) {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
@@ -74,7 +79,9 @@ app.post('/api/signup', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    const normalizedEmail = email.toLowerCase();
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
 
     if (existingUser) {
       return res.status(400).json({ error: 'An account with this email already exists' });
@@ -83,7 +90,7 @@ app.post('/api/signup', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = new User({
-      email: email.toLowerCase(),
+      email: normalizedEmail,
       password: hashedPassword
     });
 
@@ -110,7 +117,9 @@ app.post('/api/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const normalizedEmail = email.toLowerCase();
+
+    const user = await User.findOne({ email: normalizedEmail });
 
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
@@ -156,6 +165,7 @@ app.get('/api/resources', requireAuth, async (req, res) => {
   try {
     const filter = req.query.category ? { category: req.query.category } : {};
     const resources = await Resource.find(filter).sort({ createdAt: -1 });
+
     res.json(resources);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -180,6 +190,7 @@ app.post('/api/resources', requireAuth, requireAdmin, async (req, res) => {
   try {
     const newResource = new Resource(req.body);
     const saved = await newResource.save();
+
     res.status(201).json(saved);
   } catch (err) {
     res.status(400).json({ error: err.message });
